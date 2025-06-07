@@ -63,11 +63,35 @@ char getKeypadKey() {
   return 0;
 }
 
+String urlEncode(const String& str) {
+  String encoded = "";
+  char c;
+  char code0, code1;
+  for (int i = 0; i < str.length(); i++) {
+    c = str.charAt(i);
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      encoded += c;
+    } else {
+      code1 = (c & 0xf) + '0';
+      if ((c & 0xf) > 9) code1 = (c & 0xf) - 10 + 'A';
+      code0 = ((c >> 4) & 0xf) + '0';
+      if (((c >> 4) & 0xf) > 9) code0 = ((c >> 4) & 0xf) - 10 + 'A';
+      encoded += '%';
+      encoded += code0;
+      encoded += code1;
+    }
+  }
+  return encoded;
+}
+
 // ✅ Poprawiona funkcja HTTP z prawidłowym nagłówkiem Authorization
 void sendToDomoticzHTTP(int idx, const String& svalue) {
+
+  String encodedValue = urlEncode(svalue);
+
   String path = "/json.htm?type=command&param=udevice";
   path += "&idx=" + String(idx);
-  path += "&nvalue=0&svalue=" + svalue;
+  path += "&nvalue=0&svalue=" + encodedValue;;
 
   if (!wifiClient.connect(serverUrl, serverPort)) {
     Serial.println("! Conn failed");
@@ -75,8 +99,9 @@ void sendToDomoticzHTTP(int idx, const String& svalue) {
   }
 
   wifiClient.print("GET " + path + " HTTP/1.1\r\n");
+  wifiClient.print("Accept-Charset: utf-8\r\n");
   wifiClient.print("Host: "); wifiClient.print(serverUrl); wifiClient.print(":" + String(serverPort) + "\r\n");
-  wifiClient.print("Authorization: Basic Y29zbW86MTIzNDU2Nzg=\r\n"); // <-- poprawione
+  wifiClient.print("Authorization: Basic Y29zbW86Y29zbW8xMjM= \r\n"); // <-- poprawione
   wifiClient.print("Connection: close\r\n");
   wifiClient.print("Accept: */*\r\n");
   wifiClient.print("\r\n");
@@ -95,6 +120,12 @@ void sendToDomoticzHTTP(int idx, const String& svalue) {
     Serial.println("Data successfully sent to Domoticz.");
   }
 
+
+    while (wifiClient.available()) {
+    String line = wifiClient.readStringUntil('\r');
+    Serial.print(line);
+  }
+
   wifiClient.stop();
 }
 
@@ -102,7 +133,7 @@ void sendContactToDomoticz(int idx, bool isOpen) {
   String path = "/json.htm?type=command&param=udevice";
   path += "&idx=" + String(idx);
   path += "&nvalue=";
-  path += (isOpen ? "1" : "0"); // 1 = Open, 0 = Closed
+  path += (isOpen ? "0" : "1"); // 1 = Open, 0 = Closed
 
   if (!wifiClient.connect(serverUrl, serverPort)) {
     Serial.println("! Conn failed");
@@ -110,8 +141,9 @@ void sendContactToDomoticz(int idx, bool isOpen) {
   }
 
   wifiClient.print("GET " + path + " HTTP/1.1\r\n");
+  wifiClient.print("Accept-Charset: utf-8\r\n");
   wifiClient.print("Host: "); wifiClient.print(serverUrl); wifiClient.print(":" + String(serverPort) + "\r\n");
-  wifiClient.print("Authorization: Basic Y29zbW86MTIzNDU2Nzg=\r\n");
+  wifiClient.print("Authorization: Basic Y29zbW86Y29zbW8xMjM= \r\n");
   wifiClient.print("Connection: close\r\n");
   wifiClient.print("Accept: */*\r\n");
   wifiClient.print("\r\n");
@@ -172,8 +204,8 @@ void loop() {
         sendToDomoticzHTTP(IDX_KEY, ok ? "Kod poprawny" : "Kod niepoprawny");
         Serial.print("Wprowadzony kod: ");
         Serial.println(enteredCode);
-        if (ok) Serial.println("Kod jest poprawny.");
-        else Serial.println("Kod jest niepoprawny.");
+        if (ok) Serial.println("Kod poprawny.");
+        else Serial.println("Kod niepoprawny.");
       } else {
         sendToDomoticzHTTP(IDX_KEY, "Kod za krótki");
         Serial.println("Kod za krótki.");
@@ -209,7 +241,7 @@ void loop() {
     Serial.print("Soil: "); Serial.println(soil);
     Serial.print("Door: "); Serial.println(isOpen ? "Closed" : "Open");
 
-    String tempHumid = String(temp, 2) + ";" + String(humid, 2);
+    String tempHumid = String(temp, 2) + "°C" + " , " + String(humid, 2) + "%";
     sendToDomoticzHTTP(IDX_TEMP_HUMID, tempHumid);
     sendToDomoticzHTTP(IDX_LUX,  String(lux,  2));
     sendToDomoticzHTTP(IDX_SOIL, String(soil, 2));
